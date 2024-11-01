@@ -20,25 +20,24 @@ ds_preparation_logger = logging.getLogger(__name__)
 RANDOM_SEED: int = 42
 
 
-def get_relevance_pairs(questions: List[str], documents: List[str]) -> List[Tuple[str, str]]:
-    return list(zip(questions, documents))
+def get_relevance_pairs(questions: List[str], documents: List[str]):
+    for it in zip(questions, documents):
+        yield it
 
 
 def get_irrelevance_pairs(questions: List[str], documents: List[str],
-                          tokenizer: RobertaTokenizer, model: RobertaModel) -> List[Tuple[str, str]]:
-    pairs = []
+                          tokenizer: RobertaTokenizer, model: RobertaModel):
     set_of_indices = set(range(len(questions)))
     for idx, val in enumerate(tqdm(questions)):
-        other_indices = sorted(list(set_of_indices - {idx}))
+        other_indices = random.sample(population=list(set_of_indices - {idx}), k=20)
         similarities = [calculate_similarity(questions[idx], documents[doc_idx], tokenizer, model)
                         for doc_idx in other_indices]
         indices_and_similarities = sorted(
             list(zip(other_indices, similarities)),
-            key=lambda val: (-val[1], val[0])
+            key=lambda x: (-x[1], x[0])
         )
-        pairs.append((val, documents[indices_and_similarities[0][0]]))
-        pairs.append((val, documents[indices_and_similarities[1][0]]))
-    return pairs
+        yield val, documents[indices_and_similarities[0][0]]
+        yield val, documents[indices_and_similarities[1][0]]
 
 
 def main():
@@ -93,34 +92,31 @@ def main():
     positive_answer = 'Да, ответ на вопрос есть в этом документе.'
     negative_answer = 'Нет, ответа на вопрос нет в этом документе.'
 
-    relevance_pairs = get_relevance_pairs(ds['train']['question'], ds['train']['context'])
-    irrelevance_pairs = get_irrelevance_pairs(ds['train']['question'], ds['train']['context'], tokenizer, model)
-    with codecs.open(os.path.join(output_dataset_dir, 'training_data.csv'), mode='w', encoding='utf-8') as fp:
-        data_writer = csv.writer(fp, delimiter=',', quotechar='"')
-        data_writer.writerow(['text', 'category', 'label'])
-        for cur_question, cur_doc in relevance_pairs:
-            data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), positive_answer, '1'])
-        for cur_question, cur_doc in irrelevance_pairs:
-            data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), negative_answer, '0'])
-
-    relevance_pairs = get_relevance_pairs(ds['validation']['question'], ds['validation']['context'])
-    irrelevance_pairs = get_irrelevance_pairs(ds['validation']['question'], ds['validation']['context'], tokenizer, model)
     with codecs.open(os.path.join(output_dataset_dir, 'validation_data.csv'), mode='w', encoding='utf-8') as fp:
         data_writer = csv.writer(fp, delimiter=',', quotechar='"')
         data_writer.writerow(['text', 'category', 'label'])
-        for cur_question, cur_doc in relevance_pairs:
+        for cur_question, cur_doc in get_relevance_pairs(ds['validation']['question'], ds['validation']['context']):
             data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), positive_answer, '1'])
-        for cur_question, cur_doc in irrelevance_pairs:
+        for cur_question, cur_doc in get_irrelevance_pairs(ds['validation']['question'], ds['validation']['context'],
+                                                           tokenizer, model):
             data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), negative_answer, '0'])
 
-    relevance_pairs = get_relevance_pairs(ds['test']['question'], ds['test']['context'])
-    irrelevance_pairs = get_irrelevance_pairs(ds['test']['question'], ds['test']['context'], tokenizer, model)
     with codecs.open(os.path.join(output_dataset_dir, 'test_data.csv'), mode='w', encoding='utf-8') as fp:
         data_writer = csv.writer(fp, delimiter=',', quotechar='"')
         data_writer.writerow(['text', 'category', 'label'])
-        for cur_question, cur_doc in relevance_pairs:
+        for cur_question, cur_doc in get_relevance_pairs(ds['test']['question'], ds['test']['context']):
             data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), positive_answer, '1'])
-        for cur_question, cur_doc in irrelevance_pairs:
+        for cur_question, cur_doc in get_irrelevance_pairs(ds['test']['question'], ds['test']['context'],
+                                                           tokenizer, model):
+            data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), negative_answer, '0'])
+
+    with codecs.open(os.path.join(output_dataset_dir, 'training_data.csv'), mode='w', encoding='utf-8') as fp:
+        data_writer = csv.writer(fp, delimiter=',', quotechar='"')
+        data_writer.writerow(['text', 'category', 'label'])
+        for cur_question, cur_doc in get_relevance_pairs(ds['train']['question'], ds['train']['context']):
+            data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), positive_answer, '1'])
+        for cur_question, cur_doc in get_irrelevance_pairs(ds['train']['question'], ds['train']['context'],
+                                                           tokenizer, model):
             data_writer.writerow([text_template.format(question=cur_question, doc=cur_doc), negative_answer, '0'])
 
 
